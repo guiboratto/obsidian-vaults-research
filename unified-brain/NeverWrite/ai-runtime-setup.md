@@ -1,0 +1,506 @@
+# AI Runtime Setup
+
+NeverWrite talks to AI providers through ACP runtimes. The desktop renderer does
+not launch provider CLIs directly; it calls the native backend through the
+allowlisted `ai_*` commands in
+[`apps/desktop/src-electron/main/nativeBackend.ts`](../apps/desktop/src-electron/main/nativeBackend.ts).
+The backend owns runtime discovery, authentication state, environment injection,
+session startup, and logout in
+[`apps/desktop/native-backend/src/ai.rs`](../apps/desktop/native-backend/src/ai.rs).
+
+The user-facing provider setup UI lives in
+[`apps/desktop/src/features/settings/AIProvidersSettings.tsx`](../apps/desktop/src/features/settings/AIProvidersSettings.tsx).
+The static fallback catalog is in
+[`runtimeMetadata.ts`](../apps/desktop/src/features/ai/utils/runtimeMetadata.ts),
+and terminal-auth routing helpers are in
+[`authMethods.ts`](../apps/desktop/src/features/ai/utils/authMethods.ts).
+
+## Provider Matrix
+
+| Runtime id | Runtime command | Bundled in release | Auth methods exposed by NeverWrite |
+| --- | --- | --- | --- |
+| `codex-acp` | `codex-acp` | Yes. Staged as a sidecar binary. | ChatGPT account, OpenAI API key, Codex API key |
+| `claude-acp` | Claude ACP adapter | Yes. Staged as a prepared npm runtime plus embedded Node. | Claude subscription terminal login, Anthropic Console terminal login, Anthropic API key, custom Anthropic-compatible gateway |
+| `grok-acp` | `grok --no-auto-update agent stdio` | No. Must be available from PATH or a configured binary override. | Grok terminal login, xAI API key |
+| `kilo-acp` | `kilo acp` | No. Must be available from PATH or a configured binary override. | Kilo terminal login |
+| `opencode-acp` | `opencode acp` | No. Must be available from PATH or a configured binary override. | OpenCode terminal login |
+| `pi-acp` | Bundled `pi-acp` adapter launching the user's `pi` CLI | Yes. Staged as a prepared npm runtime plus embedded Node; the Pi CLI is not bundled. | Managed externally by Pi |
+
+All built-in and custom runtimes use the native backend's shared ACP actor and
+ACP wire protocol v1. There is no separate Grok protocol implementation or
+vendored legacy ACP SDK. The backend uses `agent-client-protocol` 1.2.0 with
+schema 1.4.0; these SDK package versions are not the wire protocol version.
+
+Model, mode, and reasoning selectors use advertised ACP `configOptions` and
+`session/set_config_option`. Grok's old `models` and `_meta.modelState` fields
+are ignored, even if present alongside modern options. Without an advertised
+model config option, Grok CLI manages the model: the selector is hidden, saved
+model preferences are not applied, and NeverWrite does not invent an `Auto`
+model or send `session/set_model`.
+
+Providers only show modes and slash commands that are either declared by ACP or
+kept as provider-owned fallback behavior. Grok does not receive synthetic
+`default` / `review` modes or hardcoded slash commands when its ACP runtime does
+not advertise them. The frontend falls back to the static catalog if backend
+inventory cannot be loaded.
+
+## Custom ACP Runtimes
+
+Settings can register local ACP-compatible executables in addition to the built-in provider catalog. A custom runtime is active only when its configured command passes **Verify executable**; it uses external/runtime-managed authentication rather than a NeverWrite provider login or secret form.
+
+Custom definitions are launched directly without a shell, with an isolated environment and controlled `PATH`. NeverWrite does not inject built-in provider credentials and rejects secret-like custom environment keys. Custom runtime capabilities, including continuation, options, slash commands, permissions, user input, images, and diffs, are negotiated through ACP rather than hardcoded in the UI.
+
+See [Configurable Custom ACP Runtimes](custom-acp-runtimes.md) for the definition format, continuation semantics, history identity, limits, and troubleshooting.
+
+## Runtime Discovery
+
+For every provider, the backend resolves the runtime command in this order:
+
+1. Provider-specific `NEVERWRITE_*_ACP_BIN` environment override.
+2. Custom binary path saved through the backend setup payload.
+3. Packaged release resources, when available.
+4. Development vendor fallback for Codex or the prepared runtime caches for Claude and Pi.
+5. A command found on the app process `PATH`.
+6. macOS Homebrew fallback paths for Grok and OpenCode.
+
+The provider-specific runtime binary overrides are:
+
+| Variable | Provider |
+| --- | --- |
+| `NEVERWRITE_CODEX_ACP_BIN` | Codex |
+| `NEVERWRITE_CLAUDE_ACP_BIN` | Claude |
+| `NEVERWRITE_GROK_ACP_BIN` | Grok |
+| `NEVERWRITE_KILO_ACP_BIN` | Kilo |
+| `NEVERWRITE_OPENCODE_ACP_BIN` | OpenCode |
+| `NEVERWRITE_PI_ACP_BIN` | Pi ACP adapter |
+
+The values may be absolute paths or command names resolvable on `PATH`. For
+Grok, Kilo, and OpenCode, NeverWrite appends the ACP arguments automatically:
+`grok --no-auto-update agent stdio`, `kilo acp`, and `opencode acp`.
+
+Packaged builds use `NEVERWRITE_ELECTRON_ACP_RESOURCE_DIR` internally to point
+the native backend at staged Electron resources. In normal app usage this is set
+by the Electron main process, not by users.
+
+## Authentication Methods
+
+Provider setup state is stored under the app data directory as
+`ai/runtime-setup.json`. Secret values are not kept in that JSON file in normal
+production use; they are stored through the OS keyring service named
+`NeverWrite AI Provider Secrets`. The JSON file tracks non-secret environment
+values, selected auth method, custom binary path when one has been supplied by
+an internal setup flow, and which secret keys belong to a runtime.
+
+The backend also detects existing CLI auth files and environment secrets:
+
+| Provider | Existing auth detection |
+| --- | --- |
+| Codex | `CODEX_API_KEY`, `OPENAI_API_KEY`, or non-empty `~/.codex/auth.json` |
+| Claude | `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_BEDROCK_BASE_URL`, or non-empty `~/.claude.json` |
+| Grok | `XAI_API_KEY` or active non-empty Grok CLI auth under `~/.grok/`, currently `~/.grok/auth.json` |
+| Kilo | Non-empty Kilo auth file, including `~/.local/share/kilo/auth.json` on Unix-like systems |
+| OpenCode | `OPENCODE_API_KEY`, provider keys inherited by OpenCode, or active `opencode/auth.json` in the platform data directory |
+| Pi | Existing Pi installation and provider configuration; NeverWrite does not copy or store Pi credentials |
+
+### Pi
+
+NeverWrite owns and pins `pi-acp`; the user owns the Pi CLI and its provider
+configuration. Install it with
+`npm install -g --ignore-scripts @earendil-works/pi-coding-agent` so the `pi`
+executable is available on `PATH`, then
+configure models and credentials with Pi itself. NeverWrite locates that executable,
+passes its absolute path to the bundled adapter through `PI_ACP_PI_COMMAND`, and
+derives model and thinking-level selectors from ACP session configuration.
+
+Pi session continuation uses ACP `session/load`. Only one prompt may be active per
+Pi session; NeverWrite queues normal UI follow-ups and rejects accidental overlapping
+backend requests instead of treating adapter silence as turn completion.
+
+Codex ChatGPT auth is implemented through the ACP `authenticate` request and
+requires a resolved Codex runtime binary before NeverWrite marks it connected.
+Codex does not use the integrated auth terminal.
+
+Claude, Grok, Kilo, and OpenCode expose integrated terminal auth methods.
+NeverWrite starts the provider CLI in a PTY and marks auth pending before
+launch. A zero exit code marks the provider verified; Grok and OpenCode can
+also be marked verified when terminal output contains success strings recognized
+by the backend.
+
+Claude adapts its visible terminal login methods to the environment. In remote
+or no-browser environments (`NO_BROWSER`, `SSH_CONNECTION`, `SSH_CLIENT`,
+`SSH_TTY`, or `CLAUDE_CODE_REMOTE`), the setup UI exposes `claude-login` instead
+of the local `claude-ai-login` / `console-login` split.
+
+## Provider-Specific Setup
+
+### Codex
+
+Use one of:
+
+- ChatGPT account sign-in from the provider setup UI.
+- An OpenAI API key saved in the setup UI, stored as `OPENAI_API_KEY` for this runtime.
+- A Codex API key saved in the setup UI, stored as `CODEX_API_KEY` for this runtime.
+- Existing CLI auth in `~/.codex/auth.json`.
+- Process environment `OPENAI_API_KEY` or `CODEX_API_KEY`.
+
+In releases, `codex-acp` and its `codex-code-mode-host` companion are bundled
+under `native-backend/binaries/`. NeverWrite launches `codex-acp`; the companion
+is required for Codex code-mode features. In development, build or point to a
+local runtime pair if the vendor fallback is not present.
+
+The vendored adapter currently embeds Codex `0.155.1` and retains NeverWrite's
+ACP v1 product contracts. Updating a global Codex CLI does not update this pair.
+The runtime's source pins, compatibility tests and rollback procedure are in
+[`vendor/README.md`](../vendor/README.md#codex-01551-compatibility-baseline).
+
+### Claude
+
+Use one of:
+
+- Claude subscription terminal login.
+- Anthropic Console terminal login.
+- Anthropic API key saved in the setup UI, stored as `ANTHROPIC_API_KEY`.
+- Custom Anthropic-compatible gateway.
+- Custom Bedrock-compatible gateway.
+- Existing CLI auth in `~/.claude.json`.
+- Process environment `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, or `ANTHROPIC_BEDROCK_BASE_URL`.
+
+Gateway setup accepts a base URL, optional headers, and an optional auth token.
+Gateway URLs must be HTTPS unless the host is loopback (`localhost`, a
+`.localhost` name, `127.0.0.0/8`, or `::1`). URLs with embedded credentials are
+rejected by both frontend validation and backend validation. Gateway headers are
+stored as `ANTHROPIC_CUSTOM_HEADERS`, the token as `ANTHROPIC_AUTH_TOKEN`, and
+the base URL as `ANTHROPIC_BASE_URL`.
+
+Bedrock gateway setup uses the same URL and headers validation, stores the base
+URL as `ANTHROPIC_BEDROCK_BASE_URL`, and sets `CLAUDE_CODE_USE_BEDROCK=1` when
+launching the Claude runtime. Bedrock gateway setup does not use an Anthropic
+auth token.
+
+When NeverWrite configures a Claude gateway through ACP, that route is authoritative over user and project Claude settings for the session. The adapter clears competing Anthropic, Bedrock, Vertex, OAuth, API-key, and `apiKeyHelper` routing while the override is active, while preserving unrelated Claude settings. Disabling the ACP override restores native Claude routing.
+
+### Removed Gemini ACP Support
+
+NeverWrite no longer registers a `gemini-acp` provider. Google redirected
+Gemini CLI subscription usage toward Antigravity, and Antigravity is closed
+source and does not expose ACP support for third-party apps. That leaves no
+stable ACP path for NeverWrite to launch or authenticate Gemini as an app-owned
+runtime.
+
+Antigravity can still be used manually from a terminal outside NeverWrite. It is
+not managed by the AI Providers setup UI, does not participate in NeverWrite
+chat sessions, and does not receive NeverWrite's review/change-control events.
+
+### Grok
+
+Use one of:
+
+- Grok terminal login from the setup UI, exposed as `grok-login`.
+- xAI API key saved in the setup UI, exposed as `xai-api-key` and stored as `XAI_API_KEY`.
+- Existing Grok CLI auth under `~/.grok/`, currently `~/.grok/auth.json`.
+- Process environment `XAI_API_KEY`.
+
+Because Grok is not bundled by default, install the Grok CLI separately or
+configure `NEVERWRITE_GROK_ACP_BIN`. NeverWrite launches sessions as
+`grok --no-auto-update agent stdio` and opens terminal auth as `grok login`.
+
+Grok requires ACP authentication inside the same runtime process that opens the
+session. Before `session/new`, NeverWrite sends `authenticate` with
+`xai.api_key` for API-key auth and `cached_token` for Grok CLI login auth. If
+the running Grok ACP process does not advertise the selected method during
+`initialize`, setup remains local but session startup fails with an explicit
+auth-method error.
+
+Saved xAI API keys live in the OS keyring as `XAI_API_KEY`; they are not written
+to `ai/runtime-setup.json`. The JSON setup file only records the selected auth
+method and secret-key marker. If the app process inherits `XAI_API_KEY`, that
+environment value is preferred by default. A locally saved xAI key that is
+selected and ready is passed to the Grok ACP process explicitly, so it can
+recover from an inherited `XAI_API_KEY` that NeverWrite has marked invalid.
+NeverWrite does not delete or overwrite the inherited environment variable.
+
+Grok uses the same ACP v1 session and authentication actor as the other runtimes,
+while keeping its launch arguments (`--no-auto-update agent stdio`), credential
+selection, headless authentication metadata, and existing client capabilities.
+Advertised model config options use `session/set_config_option`; otherwise the
+CLI owns model selection. Grok mode changes use that RPC only when a mode
+config option is advertised; the legacy `session/set_mode` RPC is not sent.
+This migration does not enable native Grok session resume. Saved chats continue
+through the existing transcript-based recovery flow.
+
+Some Grok models map to different provider-side `agentType` values. Once a chat
+has started, switching to a model that requires a different `agentType` is
+blocked because the Grok ACP runtime requires a fresh session for that change.
+Start a new chat with the desired model instead.
+
+The sidecar smoke test (`npm run electron:ai-runtime:smoke` in `apps/desktop`,
+after building the backend) exercises Grok using a local ACP subprocess fixture:
+API-key and cached-token authentication, unsupported/rejected auth, legacy-only
+and modern model catalogs, config changes, streaming, reversible diffs,
+permissions, and cancellation. It does not contact xAI or validate a particular
+installed Grok CLI release. Before release, also check a real configured Grok
+CLI with login/API-key auth, a prompt, permission approval, cancellation, and
+saved-chat recovery; check model selection only if the CLI advertises it.
+
+Removing the old SDK also removes its `rmcp` dependency from the root Cargo
+workspace and lockfile. The separately built `vendor/codex-acp` workspace and
+external runtime dependencies are outside this removal.
+
+Disconnecting Grok in NeverWrite clears local NeverWrite setup state. For stored
+xAI API keys, it also deletes the local keyring secret. For Grok CLI login, it
+records a local invalidation marker so stale `~/.grok/auth.json` credentials are
+not immediately rehydrated, but it does not remotely log out of Grok or delete
+Grok's CLI auth files. Use the Grok CLI, or remove its auth file yourself, when
+you need a full remote/provider logout.
+
+### Kilo
+
+Use Kilo terminal login from the setup UI, a Kilo API key saved in the setup UI,
+or pre-existing Kilo CLI auth. Because Kilo is not bundled by default, install
+the CLI separately or configure `NEVERWRITE_KILO_ACP_BIN`.
+
+### OpenCode
+
+Use OpenCode terminal login from the setup UI, pre-existing OpenCode CLI auth, a
+provider key inherited by the OpenCode CLI, or `/connect` inside OpenCode.
+The current UI keeps OpenCode auth primarily owned by the OpenCode CLI rather
+than exposing a first-party API key form. Disconnecting OpenCode clears
+NeverWrite's local selection and persists an invalidation marker, but it does
+not delete `opencode/auth.json`.
+
+Because OpenCode is not bundled by default, install the CLI separately or
+configure `NEVERWRITE_OPENCODE_ACP_BIN`. NeverWrite launches sessions as
+`opencode acp` and opens auth as `opencode auth login`.
+
+## Environment Overrides
+
+These `NEVERWRITE_*` variables are relevant to AI runtime setup and packaging:
+
+| Variable | Use |
+| --- | --- |
+| `NEVERWRITE_CODEX_ACP_BIN` | Runtime launch override for Codex in dev or local troubleshooting. |
+| `NEVERWRITE_CLAUDE_ACP_BIN` | Runtime launch override for Claude in dev or local troubleshooting. |
+| `NEVERWRITE_GROK_ACP_BIN` | Runtime launch override for Grok in dev or local troubleshooting. |
+| `NEVERWRITE_KILO_ACP_BIN` | Runtime launch override for Kilo in dev or local troubleshooting. |
+| `NEVERWRITE_OPENCODE_ACP_BIN` | Runtime launch override for OpenCode in dev or local troubleshooting. |
+| `NEVERWRITE_APP_DATA_DIR` | Overrides app data storage, including `ai/runtime-setup.json`; Electron sets this for the sidecar. |
+| `NEVERWRITE_AI_SECRET_STORE=memory` | Test/smoke-only opt-in for in-memory secrets when no OS keyring is available. Do not use for production persistence. |
+| `NEVERWRITE_NATIVE_BACKEND_PATH` | Forces Electron to use a specific native backend sidecar. Useful when testing a local sidecar build. |
+| `NEVERWRITE_ELECTRON_ACP_RESOURCE_DIR` | Internal packaged-resource directory used by Electron to expose bundled ACP resources to the backend. |
+| `NEVERWRITE_NATIVE_BACKEND_BUNDLE_BIN` | Packaging override for the native backend binary staged into Electron. |
+| `NEVERWRITE_CODEX_ACP_BUNDLE_BIN` | Packaging override for the Codex binary staged into Electron. |
+| `NEVERWRITE_CODEX_CODE_MODE_HOST_BUNDLE_BIN` | Packaging override for the Codex standalone code-mode host staged into Electron. Must be provided with `NEVERWRITE_CODEX_ACP_BUNDLE_BIN`. |
+| `NEVERWRITE_CODEX_ACP_BUNDLE_BIN_ARM64` / `NEVERWRITE_CODEX_ACP_BUNDLE_BIN_X64` | Target-specific macOS universal packaging inputs for the Codex ACP binary. Each configured slice requires its matching host override. |
+| `NEVERWRITE_CODEX_CODE_MODE_HOST_BUNDLE_BIN_ARM64` / `NEVERWRITE_CODEX_CODE_MODE_HOST_BUNDLE_BIN_X64` | Target-specific macOS universal packaging inputs for the standalone code-mode host. |
+| `NEVERWRITE_EMBEDDED_NODE_BIN` | Packaging override for the embedded Node binary used by bundled Claude. |
+| `NEVERWRITE_EMBEDDED_NODE_BIN_ARM64` / `NEVERWRITE_EMBEDDED_NODE_BIN_X64` | Packaging overrides for macOS universal embedded Node inputs. |
+| `NEVERWRITE_EMBEDDED_NODE_VERSION` | Embedded Node download version used by sidecar staging when no Node binary override is supplied. |
+| `NEVERWRITE_CLAUDE_EMBEDDED_DIR` | Packaging override for a complete prepared Claude runtime at the pinned baseline, with native packages for the target. |
+| `NEVERWRITE_ELECTRON_RELEASE_TARGET` | Default Rust target for `stage-electron-sidecar.mjs`. |
+| `NEVERWRITE_ELECTRON_OUTPUT_DIR` | Electron release output directory override. |
+
+Use launch overrides (`NEVERWRITE_*_ACP_BIN`) when a local provider CLI is
+installed outside the packaged app, when testing a patched runtime, or when
+diagnostics show the app cannot inherit the shell PATH you expected.
+
+Use bundle overrides (`*_BUNDLE_BIN`, embedded Node, Claude embedded directory)
+only while staging releases or local packaged builds.
+
+## Development Setup
+
+Basic desktop development:
+
+```bash
+cd apps/desktop
+npm install
+npm run dev
+```
+
+If a runtime is not found, either install the provider CLI so Electron can see
+it on PATH or launch the app with an explicit override:
+
+```bash
+cd apps/desktop
+NEVERWRITE_GROK_ACP_BIN=/absolute/path/to/grok npm run dev
+```
+
+For sidecar-only AI runtime smoke testing:
+
+```bash
+cd apps/desktop
+npm run electron:sidecar:build
+npm run electron:ai-runtime:smoke
+```
+
+The smoke test creates fake ACP runtimes, uses
+`NEVERWRITE_AI_SECRET_STORE=memory` by default, validates runtime inventory,
+setup status, diagnostics, session creation, ACP streaming, persisted history,
+the Codex auth-terminal rejection path, and the Grok ACP auth handshake plus
+reversible text-diff path.
+
+## Release Packaging
+
+Electron release packaging runs through
+[`build-electron-release.mjs`](../apps/desktop/scripts/build-electron-release.mjs),
+which builds the Electron app, stages the sidecar/resources, and then runs
+`electron-builder`.
+
+Runtime staging is handled by
+[`stage-electron-sidecar.mjs`](../apps/desktop/scripts/stage-electron-sidecar.mjs):
+
+- Builds or resolves the target-specific native backend.
+- Builds or resolves the target-specific Codex runtime pair: `codex-acp` and `codex-code-mode-host`. Both are built by one Cargo invocation with the committed lockfile and the same verified V8 archive/binding pair.
+- Inspects Mach-O, PE, or ELF headers before staging so host-architecture artifacts cannot be reused accidentally for a cross-compiled target. macOS slices are checked before `lipo`, and the produced universal binaries are checked again afterward.
+- Downloads or uses an overridden embedded Node runtime.
+- Prepares the pinned Claude npm dependency from `apps/desktop/runtimes/claude/`,
+  preserving its published baseline and locked production dependencies. Explicit
+  `NEVERWRITE_CLAUDE_EMBEDDED_DIR` or `apps/desktop/embedded/claude-agent-acp`
+  overrides must already be complete prepared runtimes; staging validates them
+  without installing into the override directory.
+- Includes and verifies target-specific native Claude packages. Preparation is
+  shared with development and writes `.cache/claude-runtime/<target>/`.
+- Copies resources to `apps/desktop/out/native-backend/`.
+
+The Electron builder config stages `apps/desktop/out/native-backend/` into the
+packaged `native-backend/` resources directory and runs
+[`verify-electron-bundle.mjs`](../apps/desktop/scripts/verify-electron-bundle.mjs)
+as an `afterPack` hook. That verification treats these Claude runtime files as
+release-critical resources:
+
+- `native-backend/embedded/claude-agent-acp/dist/index.js`
+- `native-backend/embedded/claude-agent-acp/node_modules/@agentclientprotocol/sdk/package.json`
+- `native-backend/embedded/claude-agent-acp/node_modules/@anthropic-ai/claude-agent-sdk/package.json`
+- `native-backend/embedded/claude-agent-acp/node_modules/zod/package.json`
+
+The hook also checks the published JavaScript baseline, production package versions,
+and native Claude CLI architectures. The packaged-sidecar smoke exercises Claude
+with the embedded Node, a local Anthropic mock, an actual file Read, a final ACP
+assistant response and cancellation. See the
+[runtime maintenance guide](../apps/desktop/runtimes/claude/README.md) for the
+preparer, override contract and cross-platform smoke matrix.
+
+The release workflow [`release-desktop.yml`](../.github/workflows/release-desktop.yml) builds the lockfile-pinned, target-specific Codex runtime pair, requires checksum-verified V8 artifacts for both binaries, downloads embedded Node for the target, exports the bundle override variables, and verifies macOS universal binaries for the native backend, both Codex binaries, and embedded Node.
+
+Current packaging expectations:
+
+- Codex is bundled as a native runtime pair: the `codex-acp` sidecar and the
+  `codex-code-mode-host` companion.
+- Claude is bundled through embedded Node plus the prepared npm runtime.
+- Grok is integrated but not bundled by default.
+- Kilo is integrated but not bundled by default.
+- OpenCode is integrated but not bundled by default.
+
+The packaged sidecar smoke sends ACP `initialize`, `session/new`, and `session/prompt` requests to `codex-acp` using an isolated temporary `CODEX_HOME` and deterministic local Responses mock. It verifies that an inline image reaches the Responses request, keeps the packaged host beside the ACP executable as required by the current install context, verifies the code-mode tool output and final assistant response, and inspects the ACP process tree to prove the standalone `codex-code-mode-host` process was launched.
+
+The smoke also runs a fail-closed case from an isolated ACP directory without a sibling host and requires an actionable missing-host diagnostic before checking that the native backend responds to ping. This catches missing, non-executable, wrong-architecture, or silently bypassed companion binaries before release assets are staged.
+
+## Troubleshooting
+
+### Binary Missing
+
+Open Settings -> AI Providers -> Diagnostics. Check each runtime's launch
+command, resolution source, and setup binary path. The backend reports
+`binaryReady=false` when the resolved program does not exist or cannot be found
+on PATH.
+
+Common fixes:
+
+- Set the provider-specific `NEVERWRITE_*_ACP_BIN` variable before launching the app.
+- Supply a custom binary path through `ai_update_setup` if you are exercising
+  the backend API directly or a caller that exposes this field.
+- For Grok, Kilo, or OpenCode, install the CLI separately; they are not bundled in releases.
+- For packaged Codex or Claude, check that `native-backend/binaries/` and
+  `native-backend/embedded/` exist inside the packaged app resources.
+
+### Auth Not Ready
+
+`binaryReady` and `authReady` are separate. A resolved binary does not imply
+authentication. If setup shows `authReady=false`, configure an API key, complete
+the provider terminal login, or ensure the corresponding CLI auth file exists
+and is non-empty.
+
+If the setup store cannot load because secure credential storage is unavailable,
+NeverWrite suppresses persisted auth and reports that the provider must be
+reconnected or configured through environment variables.
+
+### Provider Terminal Auth
+
+Integrated terminal auth is supported for Claude, Grok, Kilo, and
+OpenCode. If terminal auth opens but the provider remains unready:
+
+- Confirm the terminal process exited successfully.
+- For Grok, confirm `grok login` completed successfully and that active CLI auth
+  exists under `~/.grok/`, currently `~/.grok/auth.json`. You can also configure
+  `XAI_API_KEY` through the setup UI or the process environment.
+- For OpenCode, confirm `opencode auth login` completed or use `/connect` in
+  OpenCode itself.
+- Reopen diagnostics and confirm the runtime launch command points to the CLI
+  you expected.
+- Remember that Codex ChatGPT auth does not use the integrated auth terminal.
+
+### Gateway Validation
+
+Claude custom gateways must use HTTPS unless they are loopback development
+gateways. Do not include credentials in the URL. Put secrets in the optional
+headers or token fields instead.
+
+Examples:
+
+```text
+https://gateway.example/v1        OK
+http://localhost:8787/v1          OK for local development
+http://gateway.example/v1         Rejected
+https://user:pass@gateway.example Rejected
+```
+
+### Environment Diagnostics
+
+The diagnostics panel compares the app's inherited PATH, the PATH injected into
+runtimes, common executable resolution, and the final launch command for each
+runtime. Use it when a provider works in your shell but not in the Electron app.
+GUI-launched apps often inherit a different PATH than interactive shells.
+
+### Packaged vs Development Differences
+
+Development resolves Codex from its vendor binary and Claude from its prepared
+host-target cache (`npm run claude:prepare`). Packaged builds resolve both from
+`NEVERWRITE_ELECTRON_ACP_RESOURCE_DIR`, which Electron sets to the staged
+resources directory. Grok, Kilo, and OpenCode still require an external
+CLI or explicit runtime override in both development and packaged builds.
+
+If a provider works in `npm run dev` but not in a packaged app, verify:
+
+- Whether the provider is expected to be bundled at all.
+- Whether the packaged resources contain the staged runtime.
+- Whether the packaged app inherited the needed environment variables.
+- Whether a previously saved custom binary path points to a dev-only location.
+
+## Validation Commands
+
+Use the narrowest command that verifies the change you made:
+
+```bash
+# Runtime metadata/auth UI tests
+cd apps/desktop
+npm test -- src/features/ai/utils/runtimeMetadata.test.ts src/features/ai/utils/authMethods.test.ts src/features/ai/utils/claudeGatewayUrl.test.ts src/features/settings/AIProvidersSettings.test.tsx
+```
+
+```bash
+# Native backend AI runtime tests
+cargo test -p neverwrite-native-backend ai
+```
+
+```bash
+# Sidecar smoke test with a fake ACP runtime
+cd apps/desktop
+npm run electron:sidecar:build
+npm run electron:ai-runtime:smoke
+```
+
+```bash
+# Local packaged app build path
+cd apps/desktop
+npm run electron:package:unsigned
+```
+
+Last updated: June 2, 2026.

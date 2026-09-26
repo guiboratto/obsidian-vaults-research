@@ -1,0 +1,198 @@
+# Hypernovum Frontmatter Schema
+
+Hypernovum reads YAML frontmatter from Obsidian vault notes to generate a 3D code city. Each note that matches the project detection rules becomes a building.
+
+This schema is designed to be populated **manually by humans** or **automatically by AI tools** (e.g., Claude Code scanning project directories).
+
+---
+
+## Project Detection
+
+A note is recognized as a project if **any** of these conditions are true:
+
+1. Frontmatter `tags` array contains `project` (or `#project`)
+2. Frontmatter field `type` equals `project`
+
+The detection tag can be customized in plugin settings (default: `project`).
+
+---
+
+## Frontmatter Fields
+
+### Required (for detection)
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `tags` | `string[]` | Must include `project` (or the configured tag) |
+| — OR — | | |
+| `type` | `string` | Must be `project` |
+
+### Visual Encoding Fields (all optional)
+
+Several fields accept an alias, so notes written in either snake_case or
+camelCase — or under a name you already use — parse without rewriting them. The
+**Also accepts** column is exhaustive; when both are present the first name wins.
+
+| Field | Also accepts | Type | Default | Visual Effect |
+|-------|--------------|------|---------|---------------|
+| `title` | — | `string` | filename | Building label |
+| `status` | — | `string` | `active` | **Building color** (see values below) |
+| `priority` | — | `string` | `medium` | **Building height** (taller = higher priority) |
+| `stage` | — | `string` | **falls back to `status`** | **X-axis position** (pipeline progression) |
+| `category` | `domain` | `string` | `uncategorized` | **Z-axis position** (district clustering) |
+| `scope` | — | `number` | file size estimate | **Base footprint size** (larger = more complex) |
+| `health` | — | `number` (0-100) | derived from status | Health percentage for tooltip |
+| `noteCount` | — | `number` | `1` | Scope fallback + tooltip display |
+| `tasks` | — | `number` | parsed from checkboxes | **Window grid density** + total window count |
+| `tasks_done` | — | `number` | parsed from checkboxes | **Lit windows** (fill from bottom) |
+| `stack` | — | `string[]` or CSV | — | **Tech stack** shown on foundation hover |
+| `projectDir` | — | `string` | — | **Project directory** path for terminal launch (absolute or vault-relative). **Required for "Launch agent" and "Open folder" to work.** |
+| `questions` | `quests` | `string[]` or `string` | — | Open research **quests** — floating gold gems above the building, published to agents. The city's "Add quest" action appends here. |
+| `answered` | `quests_done` | `string[]` or `string` | — | Resolved quests. Moving an entry here from `questions` fires the emerald resolution shockwave. |
+| `blocked_by` | `blockedBy` | `string[]` or `string` | — | Projects that block this one → directed **blocked-by** edges + a "Blocked by X" warning. Refs may be `[[Wikilink]]`, a title, or a note path. |
+| `depends_on` | `dependsOn` | `string[]` or `string` | — | Explicit cross-language **depends-on** edges (for non-npm projects). Same ref forms as `blocked_by`. |
+| `no_deps` | `noDeps` | `boolean` | `false` | Suppress automatic `package.json` dependency scanning for this project. |
+
+### Status Values → Building Color
+
+| Value | Aliases | Color |
+|-------|---------|-------|
+| `active` | `in-progress`, `in progress` | Green (#00ff88) |
+| `blocked` | `stalled` | Red (#ff4444) |
+| `paused` | `on-hold`, `on hold` | Blue (#4488ff) |
+| `complete` | `done`, `completed` | Purple (#aa88ff) |
+
+### Priority Values → Building Height
+
+| Value | Aliases | Stories |
+|-------|---------|---------|
+| `critical` | `urgent` | 8 (tallest) |
+| `high` | — | 5 |
+| `medium` | `normal` | 3 |
+| `low` | — | 1 (shortest) |
+
+### Stage Values → X-Axis Position
+
+| Value | Aliases | Position |
+|-------|---------|----------|
+| `backlog` | `planning` | Far left |
+| `active` | `in-progress` | Center |
+| `paused` | `on-hold` | Center-right |
+| `complete` | `done`, `archived` | Far right |
+
+Omitting `stage` is normal — it falls back to whatever `status` says, so a note
+only needs `stage` when its pipeline position differs from its health.
+
+### Category → Z-Axis District
+
+Categories can be any string. Projects sharing the same category are grouped into the same district (cluster) along the Z axis. Examples: `work`, `personal`, `art`, `research`, `client-name`.
+
+### Typed Project Graph (edges)
+
+Hypernovum draws four kinds of arcs between buildings, toggled by the **EDGES** chips in the command panel:
+
+| Edge | Source | Direction | Look |
+|------|--------|-----------|------|
+| **Backlinks** | vault `[[links]]` between project notes | undirected | violet, thicker with link count |
+| **Depends on** | `package.json` deps matching a sibling project (by name, `file:`/`link:` path, or `workspace:*`) + frontmatter `depends_on` | dependent → dependency | teal, arrowhead |
+| **Blocked by** | frontmatter `blocked_by` | blocker → blocked | red-amber, arrowhead |
+| **Agents** | live agent sessions (heartbeat) | core → project | cyan |
+
+Dependency scanning matches only **sibling projects** (external packages like `react`/`three` are ignored). `no_deps: true` opts a project out of manifest scanning; frontmatter `depends_on` still applies. Right-click a building → **Trace impact** to walk the dependency graph upstream/downstream.
+
+### Agent activity (heartbeat v2)
+
+Agents make themselves visible by writing per-session snapshots to `<vault>/.hypernovum/agents/<sessionId>.json` (and an optional event log to `.hypernovum/sessions/<sessionId>.jsonl`) via the heartbeat script.
+
+The script is installed into your vault at `<vault>/.hypernovum/heartbeat.js` by the command palette action **"Install agent heartbeat hooks"** (or by "Prepare vault for AI agents"), which also prints the hook JSON with every path already resolved. `scripts/heartbeat.js` in the repository is the source of truth; the plugin bundles an embedded copy, so an installed plugin never needs the repo checked out.
+
+Each session becomes a state-colored orb; two agents touching the same file surface a conflict. See the generated `AGENTS.md` / per-project `.hypernovum/SETUP.md` for the exact invocation for your machine.
+
+---
+
+## Example: Manual Entry
+
+```yaml
+---
+tags: [project]
+title: My Web App
+status: active
+priority: high
+stage: active
+category: work
+scope: 15
+health: 75
+noteCount: 12
+---
+```
+
+## Example: Task-Based Progress
+
+```yaml
+---
+tags: [project]
+title: Trading Bot
+status: active
+priority: high
+category: trading
+tasks: 15
+tasks_done: 8
+---
+```
+
+## Example: AI-Generated Entry
+
+When an AI tool (like Claude Code) scans a project directory, it should create or update a note in the user's vault with frontmatter like this:
+
+```yaml
+---
+type: project
+title: hypernovum
+status: active
+priority: high
+stage: active
+category: obsidian-plugins
+scope: 30
+health: 85
+noteCount: 28
+stack: [TypeScript, Three.js, Zustand, esbuild]
+projectDir: C:\Users\Randall\Documents\hypernovum
+---
+
+# hypernovum
+
+Obsidian plugin — 3D Code City dashboard for PKM.
+
+- **Stack**: TypeScript, Three.js, Zustand, esbuild
+- **Files**: 28 source files
+- **Last commit**: 2026-02-04
+- **Open issues**: 3
+```
+
+## AI Integration Pattern
+
+Hypernovum has **no built-in AI**. Instead, AI tools operate externally:
+
+1. User asks their AI assistant: *"Scan my projects and set up Hypernovum"*
+2. AI reads this schema (SCHEMA.md) to learn the frontmatter format
+3. AI scans the user's project directories (analyzing code, git history, READMEs)
+4. AI creates/updates notes in the user's Obsidian vault with the correct frontmatter
+5. Hypernovum reads the frontmatter and renders the city
+
+This keeps the plugin simple and avoids API key configuration. Any AI tool that can read files and write markdown can integrate with Hypernovum.
+
+### Critical: Always Set `projectDir`
+
+The `projectDir` field is **essential** for terminal-based features (right-click → "Launch agent", "Open folder"). Without it, the plugin cannot determine where the actual project source code lives on disk, and those actions stay disabled — since 0.4.0 there is no fallback to the vault directory.
+
+**AI tools must always set `projectDir` to the absolute path of the project's root directory.** The vault note is just metadata — the real code is elsewhere on the filesystem.
+
+```yaml
+# CORRECT — absolute path to the actual project directory
+projectDir: /home/user/projects/my-app
+
+# ALSO VALID — path relative to the vault root
+projectDir: ../../projects/my-app
+
+# WRONG — omitting projectDir disables "Launch agent" and "Open folder" for this project
+```

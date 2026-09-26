@@ -1,0 +1,350 @@
+# Copyright & Licenses
+
+Copyright © 2024–2026 NeverWrite Contributors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+---
+
+## Third-Party Dependencies
+
+NeverWrite is built upon open-source software. Below is a summary of the licenses
+governing our direct and transitive dependencies, grouped by license type.
+
+### License Summary
+| License                  | Scope                                               |
+| ------------------------ | --------------------------------------------------- |
+| MIT                      | Majority of frontend and backend dependencies       |
+| Apache-2.0               | TypeScript, pdfjs-dist, agent-client-protocol       |
+| MIT OR Apache-2.0        | Most Rust crates (serde, tokio, regex, etc.)        |
+| MPL-2.0                  | cssparser, selectors, spellbook                     |
+| LGPL/MPL dictionary terms | Bundled and downloadable Hunspell dictionaries     |
+| Unicode-3.0              | ICU libraries (icu_*, zerovec, yoke, litemap)       |
+| ISC                      | ring (partial), rustls-webpki, libloading           |
+| BSD-3-Clause             | subtle, alloc-no-stdlib, brotli (dual)              |
+| Zlib                     | foldhash, tinyvec, dispatch2                        |
+| SIL OFL-1.1              | Bundled Fliege Mono font                            |
+| CC0-1.0                  | notify                                              |
+| Unlicense OR MIT         | aho-corasick, memchr, walkdir, byteorder            |
+| Anthropic SDK terms      | @anthropic-ai/claude-agent-sdk embedded runtime SDK |
+
+No GPL-only runtime code dependencies are used in this project. Spellcheck
+dictionaries are tracked separately because some packs use disjunctive
+dictionary licenses.
+
+---
+
+## Frontend Dependencies (npm)
+
+### Core Framework
+
+| Package                        | License            |
+| ------------------------------ | ------------------ |
+| react, react-dom               | MIT                |
+| zustand                        | MIT                |
+| tailwindcss, @tailwindcss/vite | MIT                |
+| vite, @vitejs/plugin-react     | MIT                |
+| typescript                     | Apache-2.0         |
+
+### Electron Runtime
+| Package                        | License |
+| ------------------------------ | ------- |
+| electron                       | MIT     |
+| electron-builder               | MIT     |
+| electron-updater               | MIT     |
+
+### Editor (CodeMirror 6)
+
+| Package                        | License |
+| ------------------------------ | ------- |
+| @codemirror/commands           | MIT     |
+| @codemirror/lang-markdown      | MIT     |
+| @codemirror/lang-javascript    | MIT     |
+| @codemirror/lang-python        | MIT     |
+| @codemirror/lang-rust          | MIT     |
+| @codemirror/lang-css           | MIT     |
+| @codemirror/lang-html          | MIT     |
+| @codemirror/lang-json          | MIT     |
+| @codemirror/lang-yaml          | MIT     |
+| @codemirror/lang-java          | MIT     |
+| @codemirror/lang-cpp           | MIT     |
+| @codemirror/lang-php           | MIT     |
+| @codemirror/lang-sql           | MIT     |
+| @codemirror/language           | MIT     |
+| @codemirror/legacy-modes       | MIT     |
+| @codemirror/merge              | MIT     |
+| @codemirror/search             | MIT     |
+| @codemirror/state              | MIT     |
+| @codemirror/view               | MIT     |
+| @codemirror/theme-one-dark     | MIT     |
+
+### Features
+
+| Package                        | License     |
+| ------------------------------ | ----------- |
+| @excalidraw/excalidraw         | MIT         |
+| @lezer/common                 | MIT         |
+| @lezer/highlight              | MIT         |
+| @xterm/xterm                   | MIT         |
+| @xterm/addon-fit               | MIT         |
+| @xterm/addon-search            | MIT         |
+| @xterm/addon-serialize         | MIT         |
+| @xterm/addon-web-links         | MIT         |
+| @xterm/addon-webgl             | MIT         |
+| @replit/codemirror-vim         | MIT         |
+| katex                          | MIT         |
+| mermaid                        | MIT         |
+| papaparse                      | MIT         |
+| pdfjs-dist                     | Apache-2.0  |
+| react-datasheet-grid           | MIT         |
+| react-force-graph-2d           | MIT         |
+| react-force-graph-3d           | MIT         |
+
+### Bundled file icons
+
+NeverWrite bundles the SVG icons and filename/folder associations from
+[Symbols](https://github.com/miguelsolorio/vscode-symbols/tree/296ef1b62287fb2315cb5651e552e09e8c8e1de8),
+copyright © 2020–22 Miguel Solorio. Symbols is MIT licensed; the complete
+upstream license is retained at
+`apps/desktop/src/assets/file-icons/LICENSE.symbols`.
+
+### Dev Dependencies
+
+| Package                              | License     |
+| ------------------------------------ | ----------- |
+| eslint                               | MIT         |
+| @eslint/js                           | MIT         |
+| eslint-plugin-react-hooks            | MIT         |
+| eslint-plugin-react-refresh          | MIT         |
+| typescript-eslint                    | MIT         |
+| vitest                               | MIT         |
+| jsdom                                | MIT         |
+| @testing-library/react              | MIT         |
+| @testing-library/jest-dom           | MIT         |
+| @testing-library/user-event         | MIT         |
+| @playwright/test                    | Apache-2.0  |
+| @types/node, @types/papaparse       | MIT         |
+| @types/react, @types/react-dom      | MIT         |
+| @types/three                        | MIT         |
+| globals                             | MIT         |
+| rcedit                              | MIT         |
+| yaml                                | ISC         |
+
+### Embedded Claude ACP Runtime
+
+| Package                                 | Version | License / Terms                 |
+| --------------------------------------- | ------- | ------------------------------- |
+| @agentclientprotocol/claude-agent-acp   | 0.81.2  | Apache-2.0                      |
+| @agentclientprotocol/sdk                | 1.5.0   | Apache-2.0                      |
+| @anthropic-ai/claude-agent-sdk          | 0.3.280 | Anthropic SDK terms in LICENSE.md |
+| @anthropic-ai/claude-agent-sdk-*        | 0.3.280 | Anthropic SDK terms in LICENSE.md |
+| @anthropic-ai/sdk                       | 0.128.0 | MIT                             |
+| @modelcontextprotocol/sdk               | 1.30.0  | MIT                             |
+| zod                                     | 4.6.5   | MIT                             |
+
+Zod provides runtime schema validation and parsing for the structured data
+exchanged by the Claude ACP adapter and its protocol SDKs.
+
+The packaged desktop app prepares the exact Claude ACP npm dependency and stages
+it under `native-backend/embedded/claude-agent-acp/` with production dependencies
+installed from its committed runtime lockfile. Platform-specific
+`@anthropic-ai/claude-agent-sdk-*` packages are included only for the target
+being packaged.
+
+### Embedded Pi ACP Runtime
+
+| Package                       | Version | License    |
+| ----------------------------- | ------- | ---------- |
+| pi-acp                        | 0.0.33  | MIT        |
+| @agentclientprotocol/sdk      | 0.26.0  | Apache-2.0 |
+| zod                           | 3.25.76 | MIT        |
+
+The packaged desktop app stages this exact locked dependency graph under
+`native-backend/embedded/pi-acp/`. The Pi coding agent is not redistributed;
+users install and configure its `pi` executable separately.
+
+---
+
+## Web Clipper Dependencies (npm)
+
+| Package                 | License |
+| ----------------------- | ------- |
+| defuddle                | MIT     |
+| dompurify               | MIT     |
+| react, react-dom        | MIT     |
+| tailwindcss, @tailwindcss/vite | MIT |
+| typescript              | Apache-2.0 |
+| vitest, jsdom           | MIT     |
+| @types/jsdom            | MIT     |
+| @wxt-dev/module-react   | MIT     |
+| wxt                     | MIT     |
+
+---
+
+## Bundled Fonts
+
+| Font        | License     | Copyright Holder | Source |
+| ----------- | ----------- | ---------------- | ------ |
+| Fliege Mono | SIL OFL-1.1 | Laptev Pavel     | https://github.com/PavelLaptev/Fliege-mono |
+
+The Fliege Mono license text is included at
+`apps/desktop/src/assets/fonts/fliege-mono/LICENSE.txt`.
+
+---
+
+## Backend Dependencies (Rust crates)
+
+### Core
+
+| Crate                      | License               |
+| -------------------------- | --------------------- |
+| agent-client-protocol, codex-extension-items | Apache-2.0            |
+| agent-client-protocol-legacy, agent-client-protocol-schema | Apache-2.0 |
+| base64, keyring, libc, tempfile, windows-sys | MIT OR Apache-2.0 |
+| cap-std | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |
+| serde, serde_json          | MIT OR Apache-2.0     |
+| tokio                      | MIT                   |
+| tokio-util                 | MIT                   |
+| async-trait                | MIT OR Apache-2.0     |
+| reqwest                    | MIT OR Apache-2.0     |
+| uuid                       | Apache-2.0 OR MIT     |
+
+### Vault & Index
+
+| Crate          | License               |
+| -------------- | --------------------- |
+| walkdir        | Unlicense OR MIT      |
+| notify         | CC0-1.0               |
+| regex          | MIT OR Apache-2.0     |
+| thiserror      | MIT OR Apache-2.0     |
+| serde_yaml     | MIT OR Apache-2.0     |
+| pdf-extract    | Apache-2.0            |
+
+### Diff
+
+| Crate          | License           |
+| -------------- | ----------------- |
+| imara-diff     | Apache-2.0        |
+| wasm-bindgen   | MIT OR Apache-2.0 |
+
+### Security & Crypto
+
+| Crate              | License                        |
+| ------------------ | ------------------------------ |
+| sha2               | MIT OR Apache-2.0              |
+| ring               | Apache-2.0 AND ISC             |
+| rustls             | MIT OR Apache-2.0 AND ISC      |
+| aws-lc-rs          | ISC AND (Apache-2.0 OR ISC)   |
+
+### Platform (macOS)
+
+| Crate                  | License                     |
+| ---------------------- | --------------------------- |
+| objc2                  | MIT                         |
+| objc2-app-kit          | Zlib OR Apache-2.0 OR MIT  |
+| objc2-foundation       | Zlib OR Apache-2.0 OR MIT  |
+
+### Terminal
+
+| Crate          | License |
+| -------------- | ------- |
+| portable-pty   | MIT     |
+
+### Internationalization (Unicode)
+
+| Crate               | License     |
+| -------------------- | ----------- |
+| icu_collections      | Unicode-3.0 |
+| icu_locale_core      | Unicode-3.0 |
+| icu_normalizer       | Unicode-3.0 |
+| icu_properties       | Unicode-3.0 |
+| zerovec              | Unicode-3.0 |
+| yoke                 | Unicode-3.0 |
+| litemap              | Unicode-3.0 |
+
+### CSS Parsing (MPL-2.0)
+
+| Crate           | License |
+| --------------- | ------- |
+| cssparser        | MPL-2.0 |
+| selectors        | MPL-2.0 |
+| spellbook        | MPL-2.0 |
+
+> **Note:** MPL-2.0 is a weak copyleft license. Modifications to these specific
+> files must be released under MPL-2.0, but this does not affect the rest of
+> the codebase.
+
+### Spellcheck Dictionaries
+
+| Dictionary | License |
+| ---------- | ------- |
+| en-US      | LGPL-2.1+ wordlist; BSD-style affix file |
+| es-ES      | GPL-3.0+ / LGPL-3.0+ / MPL-1.1+ |
+
+The bundled dictionary metadata lives in
+`apps/desktop/native-backend/resources/spellcheck/catalog.json`.
+
+---
+
+## Embedded Runtime Dependencies
+
+| Package                          | License     | Source                                  |
+| -------------------------------- | ----------- | --------------------------------------- |
+| codex-acp 0.16.0                 | Apache-2.0  | github.com/zed-industries/codex-acp     |
+| OpenAI Codex runtime rust-v0.153.4 | Apache-2.0 | github.com/openai/codex                 |
+| @agentclientprotocol/claude-agent-acp 0.81.2 | Apache-2.0 | github.com/agentclientprotocol/claude-agent-acp |
+| @anthropic-ai/claude-agent-sdk   | Anthropic SDK terms | Anthropic                       |
+| @agentclientprotocol/sdk         | Apache-2.0  | Agent Client Protocol                   |
+| pi-acp 0.0.33                    | MIT         | github.com/svkozak/pi-acp               |
+
+---
+
+## Modified Third-Party Code
+
+The following embedded packages have been modified by NeverWrite contributors.
+As required by the Apache-2.0 license, modifications are documented below.
+
+### `vendor/codex-acp` — Zed Industries (Apache-2.0)
+
+Original source: https://github.com/zed-industries/codex-acp (version 0.16.0).
+
+Zed Industries has deprecated Codex ACP. NeverWrite maintains this vendored adapter internally to preserve its Codex integration and compatibility with the application's review and session workflows.
+
+The adapter is built against the OpenAI Codex Rust workspace pinned to `rust-v0.153.4`; its packages are declared as Git dependencies in `vendor/codex-acp/Cargo.toml`.
+
+| File                  | Nature of changes                                              |
+| --------------------- | -------------------------------------------------------------- |
+| `src/thread.rs`       | Extended to support AI review flow, multi-vault sessions, and custom diff streaming |
+| `src/codex_agent.rs`  | Adapted for Agent Client Protocol 0.14 compatibility and session configuration |
+| `src/prompt_args.rs`, `src/subagents.rs` | Added custom-prompt parsing and NeverWrite child-session lifecycle projection |
+| `src/lib.rs`, `src/main.rs` | Adjusted crate wiring and compile limits for the promoted runtime graph |
+| `vendor/codex-utils-pty/` | Maintains the standalone PTY snapshot on the upstream 0.153.4 source, including Unix process-group and Windows ConPTY lifecycle hardening |
+
+---
+
+## License Compliance Notes
+
+1. **MIT** — Requires preserving copyright notices in distributed copies.
+2. **Apache-2.0** — Requires preserving copyright notices, stating changes made,
+   and including the full license text in distributed copies.
+3. **MPL-2.0** — Modifications to MPL-licensed files must be shared under MPL-2.0.
+   Does not apply to files that merely use these libraries.
+4. **Unicode-3.0** — Requires preserving copyright notices. Permissive.
+5. **ISC** — Functionally equivalent to MIT. Requires preserving copyright notices.
+6. **CC0-1.0** — Public domain dedication. No restrictions.
+7. **Zlib** — Permissive. Requires preserving copyright notices; modified versions
+   must be marked as such.
+
+---
+
+*This file is maintained from project dependency metadata. Last updated: 2026-09-14.*
